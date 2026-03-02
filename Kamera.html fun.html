@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IRON MAN · POSE & HAND DETECTOR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #0a0f1f;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #121a2c;
+            border-radius: 48px;
+            padding: 30px;
+            box-shadow: 0 30px 60px -15px #000, 0 0 0 1px #2e4a70 inset;
+        }
+        h1 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #5ac8ff, #ad7aff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .sub {
+            color: #8aa9d0;
+            margin-bottom: 25px;
+            font-size: 1.1rem;
+            border-left: 5px solid #3b82f6;
+            padding-left: 20px;
+        }
+        .video-section {
+            position: relative;
+            background: #0c1428;
+            border-radius: 36px;
+            overflow: hidden;
+            border: 2px solid #2f5680;
+            box-shadow: 0 0 30px #1e3c70;
+        }
+        #videoElement {
+            width: 100%;
+            display: block;
+            transform: scaleX(-1);
+        }
+        #canvasElement {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+        }
+        .stats-panel {
+            background: #0f1a30;
+            border-radius: 28px;
+            padding: 24px;
+            margin-top: 25px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            border: 1px solid #2f4d78;
+        }
+        .stat-card {
+            background: #1b2842;
+            padding: 18px;
+            border-radius: 20px;
+            border-left: 5px solid #4b9eff;
+        }
+        .stat-label {
+            color: #95b5e0;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+        }
+        .stat-value {
+            color: white;
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: monospace;
+        }
+        .gesture-badge {
+            background: #2c3f66;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #b3e0ff;
+            text-align: center;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 20px #4b9eff; }
+            50% { box-shadow: 0 0 40px #ad7aff; }
+            100% { box-shadow: 0 0 20px #4b9eff; }
+        }
+        .effect-panel {
+            margin-top: 25px;
+            background: #0f1a30;
+            border-radius: 28px;
+            padding: 24px;
+            border: 1px solid #2f4d78;
+        }
+        .effect-title {
+            color: #b3e0ff;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+        .effect-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .effect-item {
+            background: #1e2f4a;
+            padding: 20px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: 0.3s;
+        }
+        .effect-item.active {
+            border-color: #4b9eff;
+            box-shadow: 0 0 30px #4b9eff;
+            background: #25416b;
+        }
+        .effect-emoji {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+        .effect-name {
+            color: white;
+            font-weight: 600;
+        }
+        .effect-gesture {
+            color: #8aa9d0;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        .btn {
+            background: linear-gradient(145deg, #256ef0, #5b4cff);
+            border: none;
+            color: white;
+            font-weight: 700;
+            padding: 16px 32px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            box-shadow: 0 10px 20px -5px #1f3eb0;
+            transition: 0.2s;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.2);
+        }
+        .finger-list {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        .finger-chip {
+            background: #253b5a;
+            padding: 8px 16px;
+            border-radius: 40px;
+            color: #bad2ff;
+            font-weight: 500;
+            border: 1px solid #3d6390;
+        }
+    </style>
+    <!-- MediaPipe libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+</head>
+<body>
+<div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>🦾 J.A.R.V.I.S · IRON MAN SUIT</h1>
+        <div class="gesture-badge" id="activeEffect">⚡ REPULSOR READY</div>
+    </div>
+    <div class="sub">deteksi tangan + seluruh tubuh — gestur spesial aktifkan efek iron man</div>
+
+    <div class="video-section">
+        <video id="videoElement" autoplay playsinline></video>
+        <canvas id="canvasElement"></canvas>
+    </div>
+
+    <div class="stats-panel">
+        <div class="stat-card">
+            <div class="stat-label">TANGAN TERDETEKSI</div>
+            <div class="stat-value" id="handCount">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">JARI TERBUKA</div>
+            <div class="stat-value" id="fingerCount">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">POSE</div>
+            <div class="stat-value" id="poseName">—</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">EFEK AKTIF</div>
+            <div class="stat-value" id="effectName">⚡</div>
+        </div>
+    </div>
+
+    <div class="finger-list" id="fingerDetails">
+        <span class="finger-chip">👍 Ibu jari: —</span>
+        <span class="finger-chip">☝️ Telunjuk: —</span>
+        <span class="finger-chip">✌️ Tengah: —</span>
+        <span class="finger-chip">🖖 Manis: —</span>
+        <span class="finger-chip">🖐️ Kelingking: —</span>
+    </div>
+
+    <div class="effect-panel">
+        <div class="effect-title">🎯 GESTUR SPESIAL IRON MAN</div>
+        <div class="effect-grid" id="effectGrid">
+            <div class="effect-item" id="effect-repulsor">
+                <div class="effect-emoji">🔫</div>
+                <div class="effect-name">REPULSOR BLAST</div>
+                <div class="effect-gesture">✋ telapak terbuka</div>
+            </div>
+            <div class="effect-item" id="effect-unibeam">
+                <div class="effect-emoji">💫</div>
+                <div class="effect-name">UNIBEAM</div>
+                <div class="effect-gesture">✊ kedua tangan ke dada</div>
+            </div>
+            <div class="effect-item" id="effect-flight">
+                <div class="effect-emoji">🦅</div>
+                <div class="effect-name">FLIGHT MODE</div>
+                <div class="effect-gesture">🤸 tangan ke samping</div>
+            </div>
+            <div class="effect-item" id="effect-kame">
+                <div class="effect-emoji">🌊</div>
+                <div class="effect-name">KAMEHAMEHA</div>
+                <div class="effect-gesture">🤲 kedua tangan pinggang</div>
+            </div>
+            <div class="effect-item" id="effect-shield">
+                <div class="effect-emoji">🛡️</div>
+                <div class="effect-name">ENERGY SHIELD</div>
+                <div class="effect-gesture">🛡️ tangan silang</div>
+            </div>
+            <div class="effect-item" id="effect-rocket">
+                <div class="effect-emoji">🚀</div>
+                <div class="effect-name">ROCKET PUNCH</div>
+                <div class="effect-gesture">👊 kepalan ke depan</div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn" id="startBtn">🔷 AKTIFKAN KAMERA & IRON MAN SUIT</button>
+</div>
+
+<script>
+    (function() {
+        // ==================== KONFIGURASI ====================
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        
+        // ==================== STATE ====================
+        let hands = null;
+        let pose = null;
+        let camera = null;
+        let isDetecting = false;
+        let currentEffect = '⚡ REPULSOR READY';
+        let activeEffects = {
+            repulsor: false,
+            unibeam: false,
+            flight: false,
+            kame: false,
+            shield: false,
+            rocket: false
+        };
+
+        // ==================== ELEMEN OUTPUT ====================
+        const handCountEl = document.getElementById('handCount');
+        const fingerCountEl = document.getElementById('fingerCount');
+        const poseNameEl = document.getElementById('poseName');
+        const effectNameEl = document.getElementById('effectName');
+        const activeEffectEl = document.getElementById('activeEffect');
+        const fingerDetails = {
+            thumb: document.querySelector('.finger-list .finger-chip:nth-child(1)'),
+            index: document.querySelector('.finger-list .finger-chip:nth-child(2)'),
+            middle: document.querySelector('.finger-list .finger-chip:nth-child(3)'),
+            ring: document.querySelector('.finger-list .finger-chip:nth-child(4)'),
+            pinky: document.querySelector('.finger-list .finger-chip:nth-child(5)')
+        };
+
+        // Effect elements
+        const effectElements = {
+            repulsor: document.getElementById('effect-repulsor'),
+            unibeam: document.getElementById('effect-unibeam'),
+            flight: document.getElementById('effect-flight'),
+            kame: document.getElementById('effect-kame'),
+            shield: document.getElementById('effect-shield'),
+            rocket: document.getElementById('effect-rocket')
+        };
+
+        // ==================== INISIALISASI MEDIAPIPE ====================
+        function initMediaPipe() {
+            // Hands
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            hands.onResults(onHandResults);
+
+            // Pose
+            pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            pose.onResults(onPoseResults);
+        }
+
+        // ==================== DETEKSI JARI ====================
+        function countOpenFingers(landmarks) {
+            if (!landmarks || landmarks.length < 21) return 0;
+            let count = 0;
+            const fingerTips = [4, 8, 12, 16, 20];
+            const fingerPips = [3, 6, 10, 14, 18];
+            
+            if (landmarks[4].x < landmarks[2].x) count++;
+            for (let i = 1; i <= 4; i++) {
+                if (landmarks[fingerTips[i]].y < landmarks[fingerPips[i]].y) count++;
+            }
+            return count;
+        }
+
+        // ==================== DETEKSI GESTUR IRON MAN ====================
+        function detectIronManGestures(handLandmarks, poseLandmarks) {
+            // Reset semua efek
+            Object.keys(activeEffects).forEach(key => activeEffects[key] = false);
+
+            if (!handLandmarks || handLandmarks.length === 0) return;
+
+            const landmarks = handLandmarks[0]; // Tangan pertama
+            const openFingers = countOpenFingers(landmarks);
+
+            // 1. REPULSOR BLAST (telapak terbuka, tangan ke depan)
+            if (openFingers === 5) {
+                activeEffects.repulsor = true;
+                currentEffect = '🔫 REPULSOR BLAST';
+            }
+
+            // 2. ROCKET PUNCH (kepalan ke depan)
+            if (openFingers === 0 && landmarks[8].y < landmarks[5].y) {
+                activeEffects.rocket = true;
+                currentEffect = '🚀 ROCKET PUNCH';
+            }
+
+            // 3. UNIBEAM (kedua tangan ke dada)
+            if (handLandmarks.length === 2) {
+                const leftHand = handLandmarks[0];
+                const rightHand = handLandmarks[1];
+                const leftWrist = leftHand[0];
+                const rightWrist = rightHand[0];
+                
+                // Kedua tangan di dekat dada
+                if (Math.abs(leftWrist.x - rightWrist.x) < 0.2 && 
+                    leftWrist.y > 0.4 && leftWrist.y < 0.6) {
+                    activeEffects.unibeam = true;
+                    currentEffect = '💫 UNIBEAM';
+                }
+            }
+
+            // 4. KAMEHAMEHA (kedua tangan di pinggang)
+            if (handLandmarks.length === 2) {
+                const leftWrist = handLandmarks[0][0];
+                const rightWrist = handLandmarks[1][0];
+                if (leftWrist.y > 0.6 && rightWrist.y > 0.6 && 
+                    Math.abs(leftWrist.x - rightWrist.x) > 0.3) {
+                    activeEffects.kame = true;
+                    currentEffect = '🌊 KAMEHAMEHA';
+                }
+            }
+
+            // Update UI efek
+            updateEffectUI();
+        }
+
+        // ==================== DETEKSI POSE TUBUH ====================
+        function detectPose(landmarks) {
+            if (!landmarks) return '—';
+
+            // Deteksi pose sederhana
+            const leftShoulder = landmarks[11];
+            const rightShoulder = landmarks[12];
+            const leftHip = landmarks[23];
+            const rightHip = landmarks[24];
+            const leftWrist = landmarks[15];
+            const rightWrist = landmarks[16];
+
+            // Flight mode (tangan ke samping)
+            if (leftWrist.x < leftShoulder.x - 0.2 && rightWrist.x > rightShoulder.x + 0.2) {
+                activeEffects.flight = true;
+                currentEffect = '🦅 FLIGHT MODE';
+                return 'FLIGHT MODE';
+            }
+
+            // Shield mode (tangan silang)
+            if (leftWrist.x > rightShoulder.x && rightWrist.x < leftShoulder.x) {
+                activeEffects.shield = true;
+                currentEffect = '🛡️ ENERGY SHIELD';
+                return 'SHIELD MODE';
+            }
+
+            return 'STANDING';
+        }
+
+        // ==================== UPDATE UI EFEK ====================
+        function updateEffectUI() {
+            effectNameEl.innerText = currentEffect;
+            activeEffectEl.innerText = currentEffect;
+
+            // Update border efek
+            Object.keys(effectElements).forEach(key => {
+                if (activeEffects[key]) {
+                    effectElements[key].classList.add('active');
+                } else {
+                    effectElements[key].classList.remove('active');
+                }
+            });
+        }
+
+        // ==================== HANDLE HASIL DETEKSI ====================
+        function onHandResults(results) {
+            if (!results.multiHandLandmarks) return;
+
+            // Update hand count
+            handCountEl.innerText = results.multiHandLandmarks.length;
+
+            if (results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                const openFingers = countOpenFingers(landmarks);
+                fingerCountEl.innerText = openFingers;
+                updateFingerDetails(landmarks);
+            }
+        }
+
+        function onPoseResults(results) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!results.poseLandmarks) {
+                poseNameEl.innerText = '—';
+                return;
+            }
+
+            // Deteksi pose
+            const poseName = detectPose(results.poseLandmarks);
+            poseNameEl.innerText = poseName;
+
+            // Gambar pose
+            drawPoseConnections(results.poseLandmarks);
+            drawPoseLandmarks(results.poseLandmarks);
+
+            // Deteksi gestur tangan (gabung)
+            if (window.lastHandResults) {
+                detectIronManGestures(window.lastHandResults.multiHandLandmarks, results.poseLandmarks);
+            }
+        }
+
+        // ==================== GAMBAR POSE ====================
+        function drawPoseLandmarks(landmarks) {
+            for (const point of landmarks) {
+                ctx.beginPath();
+                ctx.arc(point.x * canvas.width, point.y * canvas.height, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ffaa00';
+                ctx.shadowColor = '#ffaa00';
+                ctx.shadowBlur = 15;
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawPoseConnections(landmarks) {
+            const connections = [
+                [11,12],[11,13],[13,15],[12,14],[14,16],  // Tangan
+                [11,23],[12,24],[23,24],[23,25],[25,27],  // Badan
+                [24,26],[26,28]                            // Kaki
+            ];
+
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 4;
+            ctx.shadowColor = '#ffaa00';
+            ctx.shadowBlur = 12;
+
+            for (const [start, end] of connections) {
+                if (landmarks[start] && landmarks[end]) {
+                    ctx.beginPath();
+                    ctx.moveTo(landmarks[start].x * canvas.width, landmarks[start].y * canvas.height);
+                    ctx.lineTo(landmarks[end].x * canvas.width, landmarks[end].y * canvas.height);
+                    ctx.stroke();
+                }
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // ==================== UPDATE DETAIL JARI ====================
+        function updateFingerDetails(landmarks) {
+            const fingerNames = ['Ibu jari', 'Telunjuk', 'Tengah', 'Manis', 'Kelingking'];
+            const openFingers = countOpenFingers(landmarks);
+            
+            const thumbOpen = landmarks[4].x < landmarks[2].x ? 'TERBUKA' : 'TERKEPAL';
+            fingerDetails.thumb.innerText = `👍 Ibu jari: ${thumbOpen}`;
+
+            const fingerTips = [8,12,16,20];
+            const fingerPips = [6,10,14,18];
+            for (let i = 0; i < 4; i++) {
+                const isOpen = landmarks[fingerTips[i]].y < landmarks[fingerPips[i]].y ? 'TERBUKA' : 'TERKEPAL';
+                const names = ['Telunjuk', 'Tengah', 'Manis', 'Kelingking'];
+                const emojis = ['☝️','✌️','🖖','🖐️'];
+                fingerDetails[['index','middle','ring','pinky'][i]].innerText = `${emojis[i]} ${names[i]}: ${isOpen}`;
+            }
+        }
+
+        // ==================== START KAMERA ====================
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }, 
+                    audio: false 
+                });
+                video.srcObject = stream;
+                await video.play();
+
+                video.addEventListener('loadedmetadata', () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                });
+
+                // Send frame ke kedua detector
+                const sendFrame = async () => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        if (hands) await hands.send({ image: video });
+                        if (pose) await pose.send({ image: video });
+                    }
+                    requestAnimationFrame(sendFrame);
+                };
+                sendFrame();
+
+                startBtn.innerText = '🔷 IRON MAN SUIT AKTIF';
+                startBtn.disabled = true;
+            } catch (err) {
+                alert('Gagal akses kamera: ' + err.message);
+            }
+        }
+
+        // ==================== INIT ====================
+        startBtn.addEventListener('click', () => {
+            initMediaPipe();
+            startCamera();
+        });
+
+        // Store hand results untuk digunakan di pose
+        const originalHandOnResults = hands?.onResults;
+        hands.onResults = (results) => {
+            window.lastHandResults = results;
+            if (originalHandOnResults) originalHandOnResults(results);
+        };
+
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+        });
+    })();
+</script>
+</body>
+</html>
